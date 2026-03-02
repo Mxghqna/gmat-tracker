@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
+// Note for VS Code: You should keep "import './index.css';" in your local file. 
+// It is removed here only to allow the preview to compile correctly.
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine,
   PieChart, Pie, Cell
@@ -86,7 +88,7 @@ try {
   analytics = getAnalytics(app);
   auth = getAuth(app);
   db = getFirestore(app);
-  appId = 'gmat-tracker-local'; // Simplified folder name for the database documents
+  appId = 'gmat-tracker-local'; 
 } catch (e) {
   console.error("Firebase initialization error:", e);
 }
@@ -95,10 +97,10 @@ try {
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('topics'); // 'topics' | 'mocks'
+  const [activeTab, setActiveTab] = useState('topics'); 
   
   // Data States
-  const [targetScore, setTargetScore] = useState(705); // Default GMAT Focus strong score
+  const [targetScore, setTargetScore] = useState(705); 
   const [syllabus, setSyllabus] = useState(DEFAULT_SYLLABUS);
   const [mocks, setMocks] = useState([]);
 
@@ -117,11 +119,7 @@ export default function App() {
     
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
+        await signInAnonymously(auth);
       } catch (err) {
         console.error("Auth error:", err);
       }
@@ -141,15 +139,13 @@ export default function App() {
 
     setLoading(true);
 
-    // Fetch Profile (Syllabus & Target Score)
     const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
     getDoc(profileRef).then((docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         if (data.syllabus) setSyllabus(data.syllabus);
-        if (data.targetScore) setTargetScore(data.targetScore);
+        if (data.targetScore !== undefined) setTargetScore(data.targetScore);
       } else {
-        // Initialize new user profile
         setDoc(profileRef, { targetScore: 705, syllabus: DEFAULT_SYLLABUS });
       }
       setLoading(false);
@@ -158,11 +154,9 @@ export default function App() {
       setLoading(false);
     });
 
-    // Listen to Mocks
     const mocksRef = collection(db, 'artifacts', appId, 'users', user.uid, 'mocks');
     const unsubMocks = onSnapshot(mocksRef, (snap) => {
       const fetchedMocks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      // Sort in memory (Rule 2: No complex queries)
       fetchedMocks.sort((a, b) => new Date(a.date) - new Date(b.date));
       setMocks(fetchedMocks);
     }, (err) => console.error("Mocks listener error:", err));
@@ -175,7 +169,6 @@ export default function App() {
     if (!user || !db) return;
     const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
     try {
-      // Make sure we save a valid number to the database
       const safeTarget = parseInt(newTarget) || 0;
       await setDoc(profileRef, { syllabus: newSyllabus, targetScore: safeTarget }, { merge: true });
     } catch (err) {
@@ -200,7 +193,6 @@ export default function App() {
 
   const handleTargetScoreChange = (e) => {
     const val = e.target.value;
-    // Allow the field to be temporarily empty (string) so users can backspace without it jumping to 0
     setTargetScore(val === '' ? '' : parseInt(val));
   };
 
@@ -272,7 +264,6 @@ export default function App() {
         }
       });
 
-      // Shorter names for the sidebar charts
       let shortName = topic.name;
       if (topic.id === 'qa_arithmetic') shortName = 'QA: Arithmetic';
       if (topic.id === 'qa_algebra') shortName = 'QA: Algebra';
@@ -313,14 +304,11 @@ export default function App() {
     const latest = mocks[mocks.length - 1].score;
     const avg = Math.round(mocks.reduce((sum, m) => sum + m.score, 0) / mocks.length);
     
-    // Moving average of last 3
     const last3 = mocks.slice(-3);
     const movingAvg = Math.round(last3.reduce((sum, m) => sum + m.score, 0) / last3.length);
     
-    // Improvement (Latest - First)
     const improvement = mocks.length > 1 ? latest - mocks[0].score : 0;
     
-    // Safely calculate gaps, guarding against an empty string in the target input
     const safeTargetScore = parseInt(targetScore) || 0;
     const gapLatest = safeTargetScore > 0 ? safeTargetScore - latest : null;
     const gapAvg = safeTargetScore > 0 ? safeTargetScore - movingAvg : null;
@@ -535,7 +523,6 @@ export default function App() {
                   </ResponsiveContainer>
                 </div>
                 
-                {/* Legend */}
                 <div className="flex justify-center gap-4 text-xs mt-2">
                   {syllabusAnalytics.chartData.map(item => (
                     <div key={item.name} className="flex items-center gap-1.5">
@@ -553,7 +540,6 @@ export default function App() {
         {activeTab === 'mocks' && (
           <div className="space-y-8 animate-in fade-in duration-300">
             
-            {/* Top Metrics Row */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
               <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm relative overflow-hidden">
                 <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Target Score</div>
@@ -600,7 +586,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Chart Area */}
             <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
               <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-6">Score Trajectory</h3>
               
@@ -647,7 +632,6 @@ export default function App() {
               )}
             </div>
 
-            {/* Input & Table */}
             <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
               <div className="p-5 border-b border-gray-100 bg-gray-50/50">
                 <form onSubmit={handleAddMock} className="flex flex-col sm:flex-row gap-3">
@@ -724,10 +708,8 @@ export default function App() {
                 </table>
               </div>
             </div>
-            
           </div>
         )}
-
       </main>
     </div>
   );
