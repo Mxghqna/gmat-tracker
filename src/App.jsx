@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-// Note for VS Code: You should keep "import './index.css';" in your local file. 
-// It is removed here only to allow the preview to compile correctly.
+// --- CRUCIAL: Uncomment the line below in your VS Code ---
+import './index.css'; 
+
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine,
   PieChart, Pie, Cell
@@ -10,7 +11,7 @@ import {
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAnalytics } from 'firebase/analytics';
-import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 
 // --- Default Syllabus Template ---
@@ -113,19 +114,22 @@ export default function App() {
   };
   const [mockForm, setMockForm] = useState({ name: '', date: getLocalYYYYMMDD(), score: '' });
 
-  // 1. Auth Setup
+  // 1. Auth Setup & Styling Fix
   useEffect(() => {
+    // --- EMERGENCY STYLING FIX ---
+    // This injects Tailwind directly into the page if the local build fails.
+    if (typeof document !== 'undefined') {
+      const tailwindScript = document.createElement('script');
+      tailwindScript.src = "https://cdn.tailwindcss.com";
+      document.head.appendChild(tailwindScript);
+    }
+
     if (!auth) return;
-    
     const initAuth = async () => {
-      try {
-        await signInAnonymously(auth);
-      } catch (err) {
-        console.error("Auth error:", err);
-      }
+      try { await signInAnonymously(auth); } 
+      catch (err) { console.error("Auth error:", err); }
     };
     initAuth();
-
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       if (!u) setLoading(false);
@@ -136,9 +140,7 @@ export default function App() {
   // 2. Data Fetching
   useEffect(() => {
     if (!user || !db) return;
-
     setLoading(true);
-
     const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'data');
     getDoc(profileRef).then((docSnap) => {
       if (docSnap.exists()) {
@@ -153,14 +155,12 @@ export default function App() {
       console.error("Error fetching profile:", err);
       setLoading(false);
     });
-
     const mocksRef = collection(db, 'artifacts', appId, 'users', user.uid, 'mocks');
     const unsubMocks = onSnapshot(mocksRef, (snap) => {
       const fetchedMocks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       fetchedMocks.sort((a, b) => new Date(a.date) - new Date(b.date));
       setMocks(fetchedMocks);
     }, (err) => console.error("Mocks listener error:", err));
-
     return () => unsubMocks();
   }, [user]);
 
@@ -171,9 +171,7 @@ export default function App() {
     try {
       const safeTarget = parseInt(newTarget) || 0;
       await setDoc(profileRef, { syllabus: newSyllabus, targetScore: safeTarget }, { merge: true });
-    } catch (err) {
-      console.error("Error saving profile:", err);
-    }
+    } catch (err) { console.error("Error saving profile:", err); }
   };
 
   const toggleSubtopic = (topicId, subtopicId, field) => {
@@ -196,14 +194,11 @@ export default function App() {
     setTargetScore(val === '' ? '' : parseInt(val));
   };
 
-  const saveTargetScoreBlur = () => {
-    saveProfileData(syllabus, targetScore);
-  };
+  const saveTargetScoreBlur = () => saveProfileData(syllabus, targetScore);
 
   const handleAddMock = async (e) => {
     e.preventDefault();
     if (!user || !db || !mockForm.date || !mockForm.score) return;
-    
     const mocksRef = collection(db, 'artifacts', appId, 'users', user.uid, 'mocks');
     try {
       await addDoc(mocksRef, {
@@ -213,18 +208,13 @@ export default function App() {
         createdAt: serverTimestamp()
       });
       setMockForm({ name: '', date: getLocalYYYYMMDD(), score: '' });
-    } catch (err) {
-      console.error("Error adding mock:", err);
-    }
+    } catch (err) { console.error("Error adding mock:", err); }
   };
 
   const handleDeleteMock = async (id) => {
     if (!user || !db) return;
-    try {
-      await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'mocks', id));
-    } catch (err) {
-      console.error("Error deleting mock:", err);
-    }
+    try { await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'mocks', id)); } 
+    catch (err) { console.error("Error deleting mock:", err); }
   };
 
   const toggleAccordion = (id) => {
@@ -233,90 +223,35 @@ export default function App() {
     );
   };
 
-  // --- Derived Analytics ---
+  // --- Analytics ---
   const syllabusAnalytics = useMemo(() => {
-    let totalSubtopics = 0;
-    let theoryDoneCount = 0;
-    let practiceDoneCount = 0;
-    let fullyDoneCount = 0;
-    let untouchedCount = 0;
-    let partialCount = 0;
-    let categoryStats = [];
-
+    let totalSubtopics = 0, theoryDoneCount = 0, practiceDoneCount = 0, fullyDoneCount = 0, untouchedCount = 0, partialCount = 0, categoryStats = [];
     syllabus.forEach(topic => {
-      let catTotal = 0;
-      let catTheory = 0;
-      let catPractice = 0;
-
+      let catTotal = 0, catTheory = 0, catPractice = 0;
       topic.subtopics.forEach(sub => {
-        totalSubtopics++;
-        catTotal++;
-        
+        totalSubtopics++; catTotal++;
         if (sub.theoryDone) { theoryDoneCount++; catTheory++; }
         if (sub.practiceDone) { practiceDoneCount++; catPractice++; }
-        
-        if (sub.theoryDone && sub.practiceDone) {
-          fullyDoneCount++;
-        } else if (sub.theoryDone || sub.practiceDone) {
-          partialCount++;
-        } else {
-          untouchedCount++;
-        }
+        if (sub.theoryDone && sub.practiceDone) fullyDoneCount++;
+        else if (sub.theoryDone || sub.practiceDone) partialCount++;
+        else untouchedCount++;
       });
-
       let shortName = topic.name;
       if (topic.id === 'qa_arithmetic') shortName = 'QA: Arithmetic';
       if (topic.id === 'qa_algebra') shortName = 'QA: Algebra';
       if (topic.id === 'verbal') shortName = 'Verbal';
       if (topic.id === 'di') shortName = 'Data Insights';
-
-      categoryStats.push({
-        id: topic.id,
-        name: shortName,
-        total: catTotal,
-        theoryCount: catTheory,
-        practiceCount: catPractice,
-        theoryPerc: catTotal ? Math.round((catTheory / catTotal) * 100) : 0,
-        practicePerc: catTotal ? Math.round((catPractice / catTotal) * 100) : 0,
-      });
+      categoryStats.push({ id: topic.id, name: shortName, total: catTotal, theoryCount: catTheory, practiceCount: catPractice, theoryPerc: catTotal ? Math.round((catTheory / catTotal) * 100) : 0, practicePerc: catTotal ? Math.round((catPractice / catTotal) * 100) : 0 });
     });
-
-    return {
-      total: totalSubtopics,
-      theoryCount: theoryDoneCount,
-      practiceCount: practiceDoneCount,
-      fullyDoneCount: fullyDoneCount,
-      theoryPerc: totalSubtopics ? Math.round((theoryDoneCount / totalSubtopics) * 100) : 0,
-      practicePerc: totalSubtopics ? Math.round((practiceDoneCount / totalSubtopics) * 100) : 0,
-      fullyDonePerc: totalSubtopics ? Math.round((fullyDoneCount / totalSubtopics) * 100) : 0,
-      categoryStats,
-      chartData: [
-        { name: 'Fully Done', value: fullyDoneCount, color: '#000000' },
-        { name: 'Partial', value: partialCount, color: '#9CA3AF' },
-        { name: 'Untouched', value: untouchedCount, color: '#F3F4F6' }
-      ]
-    };
+    return { total: totalSubtopics, theoryCount: theoryDoneCount, practiceCount: practiceDoneCount, fullyDoneCount: fullyDoneCount, theoryPerc: totalSubtopics ? Math.round((theoryDoneCount / totalSubtopics) * 100) : 0, practicePerc: totalSubtopics ? Math.round((practiceDoneCount / totalSubtopics) * 100) : 0, fullyDonePerc: totalSubtopics ? Math.round((fullyDoneCount / totalSubtopics) * 100) : 0, categoryStats, chartData: [{ name: 'Fully Done', value: fullyDoneCount, color: '#000000' }, { name: 'Partial', value: partialCount, color: '#9CA3AF' }, { name: 'Untouched', value: untouchedCount, color: '#F3F4F6' }] };
   }, [syllabus]);
 
   const mockAnalytics = useMemo(() => {
     if (mocks.length === 0) return null;
-    
-    const latest = mocks[mocks.length - 1].score;
-    const avg = Math.round(mocks.reduce((sum, m) => sum + m.score, 0) / mocks.length);
-    
-    const last3 = mocks.slice(-3);
-    const movingAvg = Math.round(last3.reduce((sum, m) => sum + m.score, 0) / last3.length);
-    
-    const improvement = mocks.length > 1 ? latest - mocks[0].score : 0;
-    
-    const safeTargetScore = parseInt(targetScore) || 0;
-    const gapLatest = safeTargetScore > 0 ? safeTargetScore - latest : null;
-    const gapAvg = safeTargetScore > 0 ? safeTargetScore - movingAvg : null;
-
-    return { latest, avg, movingAvg, improvement, gapLatest, gapAvg };
+    const latest = mocks[mocks.length - 1].score, avg = Math.round(mocks.reduce((sum, m) => sum + m.score, 0) / mocks.length), last3 = mocks.slice(-3), movingAvg = Math.round(last3.reduce((sum, m) => sum + m.score, 0) / last3.length), safeTargetScore = parseInt(targetScore) || 0, gapLatest = safeTargetScore > 0 ? safeTargetScore - latest : null, gapAvg = safeTargetScore > 0 ? safeTargetScore - movingAvg : null;
+    return { latest, avg, movingAvg, gapLatest, gapAvg };
   }, [mocks, targetScore]);
 
-  // --- UI Components ---
   const ProgressBar = ({ label, percentage, countText, size = 'md' }) => (
     <div className="mb-3 last:mb-0">
       <div className="flex justify-between items-center mb-1">
@@ -331,107 +266,44 @@ export default function App() {
     </div>
   );
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 className="w-8 h-8 animate-spin text-black" />
-      </div>
-    );
-  }
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><Loader2 className="w-8 h-8 animate-spin text-black" /></div>;
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 font-sans selection:bg-gray-200">
-      
-      {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2 text-xl font-bold tracking-tight">
-            <div className="w-6 h-6 bg-black rounded-sm flex items-center justify-center">
-              <div className="w-2 h-2 bg-white rounded-full"></div>
-            </div>
+            <div className="w-6 h-6 bg-black rounded-sm flex items-center justify-center"><div className="w-2 h-2 bg-white rounded-full"></div></div>
             GMAT Minimal
           </div>
-          
-          <div className="flex space-x-1 sm:space-x-4 bg-gray-100 p-1 rounded-md">
-            <button
-              onClick={() => setActiveTab('topics')}
-              className={`px-3 sm:px-4 py-1.5 text-sm font-medium rounded transition-colors ${
-                activeTab === 'topics' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:text-black'
-              }`}
-            >
-              <span className="flex items-center gap-2"><BookOpen className="w-4 h-4 hidden sm:block"/> Topics</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('mocks')}
-              className={`px-3 sm:px-4 py-1.5 text-sm font-medium rounded transition-colors ${
-                activeTab === 'mocks' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:text-black'
-              }`}
-            >
-              <span className="flex items-center gap-2"><TrendingUp className="w-4 h-4 hidden sm:block"/> Mocks</span>
-            </button>
+          <div className="flex space-x-4 bg-gray-100 p-1 rounded-md">
+            <button onClick={() => setActiveTab('topics')} className={`px-4 py-1.5 text-sm font-medium rounded ${activeTab === 'topics' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:text-black'}`}>Topics</button>
+            <button onClick={() => setActiveTab('mocks')} className={`px-4 py-1.5 text-sm font-medium rounded ${activeTab === 'mocks' ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:text-black'}`}>Mocks</button>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
-        {/* --- TAB 1: TOPIC TRACKER --- */}
+      <main className="max-w-5xl mx-auto px-4 py-8">
         {activeTab === 'topics' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-            
-            {/* Left: Topic List */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-4">
               <h2 className="text-lg font-semibold mb-4">Syllabus Completion</h2>
-              
               {syllabus.map(topic => (
                 <div key={topic.id} className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
-                  <button 
-                    onClick={() => toggleAccordion(topic.id)}
-                    className="w-full px-5 py-4 flex justify-between items-center bg-white hover:bg-gray-50 transition-colors"
-                  >
+                  <button onClick={() => toggleAccordion(topic.id)} className="w-full px-5 py-4 flex justify-between items-center bg-white hover:bg-gray-50 transition-colors">
                     <span className="font-medium">{topic.name}</span>
-                    {expandedTopics.includes(topic.id) ? 
-                      <ChevronUp className="w-5 h-5 text-gray-400" /> : 
-                      <ChevronDown className="w-5 h-5 text-gray-400" />
-                    }
+                    {expandedTopics.includes(topic.id) ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
                   </button>
-                  
                   {expandedTopics.includes(topic.id) && (
-                    <div className="border-t border-gray-100 p-0">
+                    <div className="border-t border-gray-100">
                       <div className="grid grid-cols-12 px-5 py-2 bg-gray-50 border-b border-gray-100 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        <div className="col-span-6">Subtopic</div>
-                        <div className="col-span-3 text-center">Theory</div>
-                        <div className="col-span-3 text-center">Practice</div>
+                        <div className="col-span-6">Subtopic</div><div className="col-span-3 text-center">Theory</div><div className="col-span-3 text-center">Practice</div>
                       </div>
-                      
                       {topic.subtopics.map(sub => (
-                        <div key={sub.id} className="grid grid-cols-12 px-5 py-3 border-b border-gray-50 last:border-0 items-center hover:bg-gray-50/50 transition-colors">
-                          <div className="col-span-6 text-sm text-gray-800 font-medium">
-                            {sub.name}
-                          </div>
-                          <div className="col-span-3 flex justify-center">
-                            <button 
-                              onClick={() => toggleSubtopic(topic.id, sub.id, 'theoryDone')}
-                              className="focus:outline-none"
-                            >
-                              {sub.theoryDone ? 
-                                <CheckCircle2 className="w-5 h-5 text-black" /> : 
-                                <Circle className="w-5 h-5 text-gray-300 hover:text-gray-400" />
-                              }
-                            </button>
-                          </div>
-                          <div className="col-span-3 flex justify-center">
-                            <button 
-                              onClick={() => toggleSubtopic(topic.id, sub.id, 'practiceDone')}
-                              className="focus:outline-none"
-                            >
-                              {sub.practiceDone ? 
-                                <CheckCircle2 className="w-5 h-5 text-black" /> : 
-                                <Circle className="w-5 h-5 text-gray-300 hover:text-gray-400" />
-                              }
-                            </button>
-                          </div>
+                        <div key={sub.id} className="grid grid-cols-12 px-5 py-3 border-b border-gray-50 last:border-0 items-center hover:bg-gray-50/50">
+                          <div className="col-span-6 text-sm text-gray-800 font-medium">{sub.name}</div>
+                          <div className="col-span-3 flex justify-center"><button onClick={() => toggleSubtopic(topic.id, sub.id, 'theoryDone')}>{sub.theoryDone ? <CheckCircle2 className="w-5 h-5 text-black" /> : <Circle className="w-5 h-5 text-gray-300" />}</button></div>
+                          <div className="col-span-3 flex justify-center"><button onClick={() => toggleSubtopic(topic.id, sub.id, 'practiceDone')}>{sub.practiceDone ? <CheckCircle2 className="w-5 h-5 text-black" /> : <Circle className="w-5 h-5 text-gray-300" />}</button></div>
                         </div>
                       ))}
                     </div>
@@ -440,273 +312,40 @@ export default function App() {
               ))}
             </div>
 
-            {/* Right: Dashboard */}
             <div className="space-y-6 lg:sticky lg:top-24">
               <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
-                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-5 flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4" /> Overview
-                </h3>
-                
-                <div className="mb-6">
-                  <ProgressBar 
-                    label="Total Theory Covered" 
-                    percentage={syllabusAnalytics.theoryPerc} 
-                    countText={`${syllabusAnalytics.theoryCount}/${syllabusAnalytics.total}`}
-                  />
-                  <div className="pl-3 mt-3 space-y-1 border-l-2 border-gray-100">
-                    {syllabusAnalytics.categoryStats.map(cat => (
-                      <ProgressBar 
-                        key={`th-${cat.id}`} 
-                        label={cat.name} 
-                        percentage={cat.theoryPerc} 
-                        countText={`${cat.theoryCount}/${cat.total}`}
-                        size="sm" 
-                      />
-                    ))}
+                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-5 flex items-center gap-2"><BarChart3 className="w-4 h-4" /> Overview</h3>
+                <ProgressBar label="Total Theory" percentage={syllabusAnalytics.theoryPerc} countText={`${syllabusAnalytics.theoryCount}/${syllabusAnalytics.total}`} />
+                <div className="pl-3 mt-2 border-l-2 border-gray-100 space-y-1">
+                  {syllabusAnalytics.categoryStats.map(cat => <ProgressBar key={`th-${cat.id}`} label={cat.name} percentage={cat.theoryPerc} countText={`${cat.theoryCount}/${cat.total}`} size="sm" />)}
+                </div>
+                <div className="mt-6">
+                  <ProgressBar label="Total Practice" percentage={syllabusAnalytics.practicePerc} countText={`${syllabusAnalytics.practiceCount}/${syllabusAnalytics.total}`} />
+                  <div className="pl-3 mt-2 border-l-2 border-gray-100 space-y-1">
+                    {syllabusAnalytics.categoryStats.map(cat => <ProgressBar key={`pr-${cat.id}`} label={cat.name} percentage={cat.practicePerc} countText={`${cat.practiceCount}/${cat.total}`} size="sm" />)}
                   </div>
                 </div>
-
-                <div className="mb-6">
-                  <ProgressBar 
-                    label="Total Practice Completed" 
-                    percentage={syllabusAnalytics.practicePerc} 
-                    countText={`${syllabusAnalytics.practiceCount}/${syllabusAnalytics.total}`}
-                  />
-                  <div className="pl-3 mt-3 space-y-1 border-l-2 border-gray-100">
-                    {syllabusAnalytics.categoryStats.map(cat => (
-                      <ProgressBar 
-                        key={`pr-${cat.id}`} 
-                        label={cat.name} 
-                        percentage={cat.practicePerc} 
-                        countText={`${cat.practiceCount}/${cat.total}`}
-                        size="sm" 
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-gray-100">
-                  <ProgressBar 
-                    label="Fully Mastered (Overall)" 
-                    percentage={syllabusAnalytics.fullyDonePerc} 
-                    countText={`${syllabusAnalytics.fullyDoneCount}/${syllabusAnalytics.total}`}
-                  />
-                </div>
-              </div>
-
-              <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">
-                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">
-                  Completion Ratio
-                </h3>
-                <div className="h-48 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={syllabusAnalytics.chartData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
-                        paddingAngle={2}
-                        dataKey="value"
-                        stroke="none"
-                      >
-                        {syllabusAnalytics.chartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <RechartsTooltip 
-                        contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)' }}
-                        itemStyle={{ color: '#000' }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                
-                <div className="flex justify-center gap-4 text-xs mt-2">
-                  {syllabusAnalytics.chartData.map(item => (
-                    <div key={item.name} className="flex items-center gap-1.5">
-                      <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: item.color }}></div>
-                      <span className="text-gray-600">{item.name}</span>
-                    </div>
-                  ))}
-                </div>
+                <div className="pt-4 mt-4 border-t border-gray-100"><ProgressBar label="Mastered" percentage={syllabusAnalytics.fullyDonePerc} countText={`${syllabusAnalytics.fullyDoneCount}/${syllabusAnalytics.total}`} /></div>
               </div>
             </div>
           </div>
         )}
 
-        {/* --- TAB 2: MOCK TRACKER --- */}
         {activeTab === 'mocks' && (
           <div className="space-y-8 animate-in fade-in duration-300">
-            
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-              <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm relative overflow-hidden">
-                <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Target Score</div>
-                <div className="flex items-baseline gap-2">
-                  <input 
-                    type="number" 
-                    value={targetScore}
-                    onChange={handleTargetScoreChange}
-                    onBlur={saveTargetScoreBlur}
-                    className="text-3xl font-bold bg-transparent border-b border-dashed border-gray-300 focus:border-black focus:outline-none w-24 p-0"
-                  />
-                  <Target className="w-5 h-5 text-gray-300 absolute right-4 top-4" />
-                </div>
-              </div>
-              
-              <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
-                <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Latest Score</div>
-                <div className="text-3xl font-bold">
-                  {mockAnalytics ? mockAnalytics.latest : '--'}
-                </div>
-              </div>
-
-              <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
-                <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Moving Avg (L3)</div>
-                <div className="text-3xl font-bold text-gray-700">
-                  {mockAnalytics ? mockAnalytics.movingAvg : '--'}
-                </div>
-              </div>
-
-              <div className={`border rounded-lg p-5 shadow-sm ${(mockAnalytics?.gapLatest !== null && mockAnalytics?.gapLatest <= 0) ? 'bg-black text-white border-black' : 'bg-white border-gray-200'}`}>
-                <div className={`text-xs font-bold uppercase tracking-wider mb-1 ${(mockAnalytics?.gapLatest !== null && mockAnalytics?.gapLatest <= 0) ? 'text-gray-300' : 'text-gray-500'}`}>Gap (Latest)</div>
-                <div className="text-3xl font-bold">
-                  {!mockAnalytics || mockAnalytics.gapLatest === null ? '--' : 
-                    mockAnalytics.gapLatest <= 0 ? 'Reached!' : `${mockAnalytics.gapLatest} pts`}
-                </div>
-              </div>
-
-              <div className={`border rounded-lg p-5 shadow-sm ${(mockAnalytics?.gapAvg !== null && mockAnalytics?.gapAvg <= 0) ? 'bg-black text-white border-black' : 'bg-white border-gray-200'}`}>
-                <div className={`text-xs font-bold uppercase tracking-wider mb-1 ${(mockAnalytics?.gapAvg !== null && mockAnalytics?.gapAvg <= 0) ? 'text-gray-300' : 'text-gray-500'}`}>Gap (Avg L3)</div>
-                <div className="text-3xl font-bold">
-                  {!mockAnalytics || mockAnalytics.gapAvg === null ? '--' : 
-                    mockAnalytics.gapAvg <= 0 ? 'Reached!' : `${mockAnalytics.gapAvg} pts`}
-                </div>
-              </div>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm relative"><div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Target</div><div className="flex items-baseline gap-2"><input type="number" value={targetScore} onChange={handleTargetScoreChange} onBlur={saveTargetScoreBlur} className="text-3xl font-bold bg-transparent border-b border-dashed border-gray-300 focus:border-black focus:outline-none w-24" /><Target className="w-5 h-5 text-gray-300 absolute right-4 top-4" /></div></div>
+              <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm"><div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Latest</div><div className="text-3xl font-bold">{mockAnalytics?.latest || '--'}</div></div>
+              <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm"><div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Avg L3</div><div className="text-3xl font-bold text-gray-700">{mockAnalytics?.movingAvg || '--'}</div></div>
+              <div className={`border rounded-lg p-5 shadow-sm ${mockAnalytics?.gapLatest <= 0 ? 'bg-black text-white' : 'bg-white'}`}><div className="text-xs font-bold uppercase tracking-wider mb-1">Gap (Latest)</div><div className="text-3xl font-bold">{!mockAnalytics ? '--' : mockAnalytics.gapLatest <= 0 ? 'Reached!' : `${mockAnalytics.gapLatest}`}</div></div>
+              <div className={`border rounded-lg p-5 shadow-sm ${mockAnalytics?.gapAvg <= 0 ? 'bg-black text-white' : 'bg-white'}`}><div className="text-xs font-bold uppercase tracking-wider mb-1">Gap (Avg)</div><div className="text-3xl font-bold">{!mockAnalytics ? '--' : mockAnalytics.gapAvg <= 0 ? 'Reached!' : `${mockAnalytics.gapAvg}`}</div></div>
             </div>
 
-            <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-              <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-6">Score Trajectory</h3>
-              
-              {mocks.length > 0 ? (
-                <div className="h-72 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={mocks} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                      <XAxis 
-                        dataKey="date" 
-                        axisLine={false} 
-                        tickLine={false} 
-                        tick={{ fill: '#6b7280', fontSize: 12 }} 
-                        dy={10}
-                      />
-                      <YAxis 
-                        domain={['dataMin - 20', 'dataMax + 20']} 
-                        axisLine={false} 
-                        tickLine={false} 
-                        tick={{ fill: '#6b7280', fontSize: 12 }}
-                      />
-                      <RechartsTooltip 
-                        contentStyle={{ backgroundColor: '#111827', color: '#fff', borderRadius: '8px', border: 'none', padding: '8px 12px' }}
-                        itemStyle={{ color: '#fff', fontWeight: 'bold' }}
-                        labelStyle={{ color: '#9ca3af', marginBottom: '4px', fontSize: '12px' }}
-                      />
-                      <ReferenceLine y={targetScore} stroke="#d1d5db" strokeDasharray="3 3" label={{ position: 'top', value: 'Target', fill: '#9ca3af', fontSize: 12 }} />
-                      <Line 
-                        type="monotone" 
-                        dataKey="score" 
-                        stroke="#000000" 
-                        strokeWidth={3} 
-                        dot={{ r: 4, fill: '#000', strokeWidth: 0 }} 
-                        activeDot={{ r: 6, fill: '#000', stroke: '#fff', strokeWidth: 2 }}
-                        animationDuration={1000}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <div className="h-72 w-full flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-100 rounded-lg">
-                  Log your first mock below to see the trend.
-                </div>
-              )}
-            </div>
+            <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm"><h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-6">Trajectory</h3>{mocks.length > 0 ? (<div className="h-72 w-full"><ResponsiveContainer width="100%" height="100%"><LineChart data={mocks} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" /><XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} dy={10} /><YAxis domain={['dataMin - 20', 'dataMax + 20']} axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 12 }} /><RechartsTooltip contentStyle={{ backgroundColor: '#111827', color: '#fff', borderRadius: '8px', border: 'none' }} /><ReferenceLine y={targetScore} stroke="#d1d5db" strokeDasharray="3 3" /><Line type="monotone" dataKey="score" stroke="#000000" strokeWidth={3} dot={{ r: 4, fill: '#000' }} activeDot={{ r: 6, fill: '#000', stroke: '#fff', strokeWidth: 2 }} /></LineChart></ResponsiveContainer></div>) : (<div className="h-72 w-full flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-100 rounded-lg">Log your first mock to see trend.</div>)}</div>
 
             <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
-              <div className="p-5 border-b border-gray-100 bg-gray-50/50">
-                <form onSubmit={handleAddMock} className="flex flex-col sm:flex-row gap-3">
-                  <input
-                    type="text"
-                    placeholder="Mock Name (e.g., Official 1)"
-                    value={mockForm.name}
-                    onChange={e => setMockForm({...mockForm, name: e.target.value})}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-black focus:border-black text-sm"
-                  />
-                  <input
-                    type="date"
-                    required
-                    value={mockForm.date}
-                    onChange={e => setMockForm({...mockForm, date: e.target.value})}
-                    className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-black focus:border-black text-sm"
-                  />
-                  <input
-                    type="number"
-                    placeholder="Score"
-                    required
-                    min="200"
-                    max="805"
-                    value={mockForm.score}
-                    onChange={e => setMockForm({...mockForm, score: e.target.value})}
-                    className="w-full sm:w-28 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-black focus:border-black text-sm"
-                  />
-                  <button 
-                    type="submit"
-                    disabled={!mockForm.date || !mockForm.score}
-                    className="w-full sm:w-auto bg-black text-white px-5 py-2 rounded-md font-medium text-sm hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
-                  >
-                    <Plus className="w-4 h-4" /> Add
-                  </button>
-                </form>
-              </div>
-              
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="bg-white border-b border-gray-100 text-gray-500">
-                      <th className="px-6 py-4 font-semibold uppercase tracking-wider text-xs">Date</th>
-                      <th className="px-6 py-4 font-semibold uppercase tracking-wider text-xs">Mock Name</th>
-                      <th className="px-6 py-4 font-semibold uppercase tracking-wider text-xs text-right">Score</th>
-                      <th className="px-6 py-4 font-semibold uppercase tracking-wider text-xs text-center w-20">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {mocks.length === 0 ? (
-                      <tr>
-                        <td colSpan="4" className="px-6 py-8 text-center text-gray-400">No mocks logged yet.</td>
-                      </tr>
-                    ) : (
-                      [...mocks].reverse().map((mock) => (
-                        <tr key={mock.id} className="hover:bg-gray-50/50 transition-colors group">
-                          <td className="px-6 py-4 text-gray-600">
-                            {new Date(mock.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                          </td>
-                          <td className="px-6 py-4 font-medium text-gray-900">{mock.name}</td>
-                          <td className="px-6 py-4 text-right font-bold text-lg">{mock.score}</td>
-                          <td className="px-6 py-4 text-center">
-                            <button 
-                              onClick={() => handleDeleteMock(mock.id)}
-                              className="text-gray-300 hover:text-red-500 transition-colors focus:outline-none"
-                              title="Delete Mock"
-                            >
-                              <Trash2 className="w-4 h-4 mx-auto" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              <div className="p-5 border-b border-gray-100 bg-gray-50/50"><form onSubmit={handleAddMock} className="flex flex-col sm:flex-row gap-3"><input type="text" placeholder="Name" value={mockForm.name} onChange={e => setMockForm({...mockForm, name: e.target.value})} className="flex-1 px-4 py-2 border rounded-md text-sm" /><input type="date" required value={mockForm.date} onChange={e => setMockForm({...mockForm, date: e.target.value})} className="px-4 py-2 border rounded-md text-sm" /><input type="number" placeholder="Score" required min="200" max="805" value={mockForm.score} onChange={e => setMockForm({...mockForm, score: e.target.value})} className="w-full sm:w-28 px-4 py-2 border rounded-md text-sm" /><button type="submit" className="bg-black text-white px-5 py-2 rounded-md font-medium text-sm">Add Mock</button></form></div>
+              <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="bg-white border-b border-gray-100 text-gray-500"><th className="px-6 py-4 font-semibold uppercase tracking-wider text-xs">Date</th><th className="px-6 py-4 font-semibold uppercase tracking-wider text-xs">Name</th><th className="px-6 py-4 font-semibold uppercase tracking-wider text-xs text-right">Score</th><th className="px-6 py-4 font-semibold uppercase tracking-wider text-xs text-center w-20">Del</th></tr></thead><tbody className="divide-y divide-gray-50">{mocks.length === 0 ? (<tr><td colSpan="4" className="px-6 py-8 text-center text-gray-400">No mocks logged.</td></tr>) : ([...mocks].reverse().map(mock => (<tr key={mock.id} className="hover:bg-gray-50/50"><td className="px-6 py-4 text-gray-600">{new Date(mock.date).toLocaleDateString()}</td><td className="px-6 py-4 font-medium text-gray-900">{mock.name}</td><td className="px-6 py-4 text-right font-bold text-lg">{mock.score}</td><td className="px-6 py-4 text-center"><button onClick={() => handleDeleteMock(mock.id)} className="text-gray-300 hover:text-red-500"><Trash2 className="w-4 h-4 mx-auto" /></button></td></tr>)))}</tbody></table></div>
             </div>
           </div>
         )}
